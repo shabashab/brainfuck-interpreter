@@ -1,4 +1,11 @@
+#include <stdio.h>
+#include <string.h>
+
 #include "program.h"
+
+#include "execution-frame.h"
+#include "execution-stack.h"
+#include "data-storage.h"
 
 #define BUFFER_SIZE 256
 
@@ -10,15 +17,15 @@ typedef struct file_reading_result_s {
 static file_reading_result read_file_contents(FILE* file)
 {
 	file_reading_result result;
-
-	result.data = malloc(0);
+	result.data = NULL;
 
 	char buffer[BUFFER_SIZE];
 	size_t count;
 
-	while((count = fread(&buffer, sizeof(char),	BUFFER_SIZE, file))) {
+	while((count = fread(buffer, sizeof(char), BUFFER_SIZE, file))) {
 		result.data_len += count;
 		result.data = realloc(result.data, result.data_len);
+		memcpy(result.data + (result.data_len - count - 1), buffer, count);
 	}
 	
 	return result;
@@ -72,12 +79,75 @@ program* create_program_from_file(FILE* file)
 
 	tokens = realloc(tokens, tokens_count);
 
+	result->tokens = tokens;
+	result->tokens_count = tokens_count;
+
 	execution_frame default_frame;
 
 	default_frame.start_token = tokens;
-	default_frame.end_token = tokens + tokens_count - 1;
 
 	es_push(result->stack, default_frame);
 
 	return result;
+}
+
+void execute_top_frame(program* program) {
+	execution_frame* frame = es_peek(program->stack);
+	token* cur_token = frame->start_token;
+
+	while(cur_token <= (program->tokens + (program->tokens_count - 1))) {
+		switch(*cur_token) {
+			case TOKEN_PLUS:
+				ds_increment(program->storage);
+				break;
+			case TOKEN_MINUS:
+				ds_decrement(program->storage);
+				break;
+			case TOKEN_INC_DATA:
+				ds_move_right(program->storage);
+				break;
+			case TOKEN_DEC_DATA:
+				ds_move_left(program->storage);
+				break;
+			case TOKEN_PRINT:
+				putc(ds_get(program->storage), stdout);
+				break;
+			case TOKEN_INPUT:
+				ds_set(program->storage, getchar());
+				break;
+			case TOKEN_WHILE_START:
+				break;
+			case TOKEN_WHILE_END:
+				break;
+			case TOKEN_OTHER:
+			default:
+				break;
+		}
+
+		if(*cur_token == TOKEN_WHILE_START) {
+			execution_frame frame;			
+
+			frame.start_token = cur_token + 1;
+
+			es_push(program->stack, frame);
+			execute_top_frame(program);
+		}
+
+		if(*cur_token == TOKEN_WHILE_END) {
+			if(ds_get(program->storage)) {
+				cur_token = frame->start_token;
+				continue;
+			}
+
+			break;
+		}
+
+		cur_token++;
+	}
+
+	es_pop(program->stack);
+}
+
+void execute_program(program* program) {
+	execute_top_frame(program);
 }

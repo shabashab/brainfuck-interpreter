@@ -9,7 +9,6 @@ typedef struct execution_frame_s execution_frame;
 
 struct execution_frame_s {
 	token* start_token;	
-	token* end_token;
 };
 
 #endif
